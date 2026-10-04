@@ -1,5 +1,5 @@
-// Stock threshold alerts: cron-triggered price check (Finnhub) -> push via ntfy.
-// Secrets: FINNHUB_KEY, NTFY_TOPIC, ADMIN_TOKEN. KV binding: STORE.
+// Stock threshold alerts: cron-triggered price check (Finnhub) -> message via Telegram.
+// Secrets: FINNHUB_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ADMIN_TOKEN. KV binding: STORE.
 
 const MAX_SYMBOLS = 40; // free-plan subrequest limit is 50 per invocation
 const SYMBOL_RE = /^[A-Z0-9.\-]{1,12}$/;
@@ -42,11 +42,12 @@ async function fetchPrice(symbol, key) {
 }
 
 async function notify(env, { title, message }) {
-  await fetch(`https://ntfy.sh/${env.NTFY_TOPIC}`, {
+  const r = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
-    body: message,
-    headers: { Title: title, Priority: "high", Tags: "chart_with_upwards_trend" },
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: `${title}\n${message}` }),
   });
+  if (!r.ok) console.error(`telegram: HTTP ${r.status}`);
 }
 
 async function runCheck(env) {
