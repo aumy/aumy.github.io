@@ -1,5 +1,0 @@
-[
-  {"symbol": "AAPL", "direction": "above", "price": 250.0},
-  {"symbol": "AAPL", "direction": "below", "price": 180.0},
-  {"symbol": "NVDA", "direction": "below", "price": 100.0}
-]

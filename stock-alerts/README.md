@@ -1,23 +1,24 @@
 # Stock threshold alerts
 
-A scheduled GitHub Action checks prices every 5 minutes during US market hours
-and pushes a notification to your phone via [ntfy](https://ntfy.sh) when a
-threshold is crossed.
+A Cloudflare Worker checks prices every minute during US market hours
+(Finnhub free API, 1 request/second) and pushes a notification to your phone
+via [ntfy](https://ntfy.sh) when a threshold is crossed. Thresholds are edited
+on the web page in this folder (`https://aumy.github.io/stock-alerts/`).
+Each alert fires once, then re-arms when the price moves back across it.
 
-## Setup
-1. Install the **ntfy** app (iOS/Android) and subscribe to a long, random topic name,
-   e.g. `aumy-stocks-7f3k9q2x`.
-2. In the repo: Settings → Secrets and variables → Actions → new secret
-   `NTFY_TOPIC` with that topic name.
-3. Edit `alerts.json` (`direction` is `above` or `below`) and merge to the default branch
-   (scheduled workflows only run from the default branch).
-4. Test: Actions tab → "Stock alerts" → Run workflow.
+## Deploy
+1. Get a free API key at https://finnhub.io.
+2. Install the ntfy app and subscribe to a long random topic, e.g. `aumy-stocks-7f3k9q2x`.
+3. From `worker/`:
+   ```
+   npm i -g wrangler && wrangler login
+   wrangler kv namespace create STORE      # paste the id into wrangler.toml
+   wrangler secret put FINNHUB_KEY
+   wrangler secret put NTFY_TOPIC
+   wrangler secret put ADMIN_TOKEN         # any long random string
+   wrangler deploy
+   ```
+4. Open the web page, enter the worker URL and admin token, add alerts, Save.
 
-Each alert fires once, then re-arms when the price returns to the other side.
-Prices come from Yahoo Finance's unofficial endpoint (may be ~15 min delayed; no API key).
-Note: GitHub cron can lag a few minutes, and anyone who knows your topic can read/post to it.
-
-## Editing thresholds from the web
-Once merged and GitHub Pages is on, open `https://aumy.github.io/stock-alerts/`.
-Paste a fine-grained GitHub token (repo `aumy/aumy.github.io`, Contents: read & write) once;
-the page then commits changes to `alerts.json` for you.
+Limits: up to 40 distinct symbols (Cloudflare free subrequest cap; checks are spaced 1/sec).
+Anyone who knows your ntfy topic can read it, so keep it random.
