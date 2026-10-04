@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Alerts</title>
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --muted:#666; --line:#ddd; --accent:#0b6bcb; --bad:#b3261e; --ok:#1b7f3b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#121212; --fg:#eee; --muted:#999; --line:#333; --accent:#5aa9ff; --bad:#ff8a80; --ok:#6fcf8e; } }
+  body { background:var(--bg); color:var(--fg); font:16px/1.4 system-ui,sans-serif; max-width:640px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.4rem; } h2 { font-size:1rem; margin-top:2rem; }
+  table { width:100%; border-collapse:collapse; }
+  td, th { padding:6px 4px; text-align:left; border-bottom:1px solid var(--line); }
+  input, select, button { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+  input.sym { width:6rem; text-transform:uppercase; } input.price { width:7rem; }
+  button { cursor:pointer; } button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  #status { min-height:1.4em; margin-top:8px; } .err { color:var(--bad); } .ok { color:var(--ok); }
+  .muted { color:var(--muted); font-size:.9rem; } .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  input.wide { flex:1; min-width:12rem; }
+</style>
+</head>
+<body>
+<h1>Stock Alerts</h1>
+<p class="muted">You get a push notification (via the ntfy app) when a price crosses one of these thresholds. Checked every 5 min during US market hours.</p>
+
+<table>
+  <thead><tr><th>Symbol</th><th>Alert when</th><th>Price</th><th></th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<div class="row">
+  <button id="add">+ Add alert</button>
+  <button id="save" class="primary">Save</button>
+</div>
+<div id="status" role="status"></div>
+
+<h2>GitHub access (one-time, this browser only)</h2>
+<p class="muted">Saving commits <code>alerts.json</code> to the repo. Create a
+<a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a>
+limited to <b>aumy/aumy.github.io</b> with <b>Contents: read &amp; write</b>. It is stored only in this browser's localStorage.</p>
+<div class="row"><input id="token" class="wide" type="password" placeholder="github_pat_…" autocomplete="off"><button id="saveToken">Remember</button></div>
+
+<script>
+const REPO = "aumy/aumy.github.io", PATH = "stock-alerts/alerts.json";
+const API = `https://api.github.com/repos/${REPO}/contents/${PATH}`;
+const $ = id => document.getElementById(id);
+let sha = null;
+
+const store = {
+  get: k => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+};
+const headers = () => {
+  const h = { Accept: "application/vnd.github+json" };
+  if (store.get("gh_token")) h.Authorization = "Bearer " + store.get("gh_token");
+  return h;
+};
+function status(msg, cls = "") { $("status").className = cls; $("status").textContent = msg; }
+
+function addRow(a = { symbol: "", direction: "above", price: "" }) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td><input class="sym" placeholder="AAPL"></td>
+    <td><select><option value="above">goes above</option><option value="below">drops below</option></select></td>
+    <td><input class="price" type="number" step="any" min="0" inputmode="decimal"></td>
+    <td><button title="Remove" aria-label="Remove">✕</button></td>`;
+  tr.querySelector(".sym").value = a.symbol;
+  tr.querySelector("select").value = a.direction;
+  tr.querySelector(".price").value = a.price;
+  tr.querySelector("button").onclick = () => tr.remove();
+  $("rows").appendChild(tr);
+}
+
+function readRows() {
+  const out = [];
+  for (const tr of $("rows").children) {
+    const symbol = tr.querySelector(".sym").value.trim().toUpperCase();
+    const price = parseFloat(tr.querySelector(".price").value);
+    if (!symbol && isNaN(price)) continue;
+    if (!/^[A-Z0-9.\-^=]{1,12}$/.test(symbol) || !(price > 0)) throw new Error("Each alert needs a valid symbol and a positive price.");
+    out.push({ symbol, direction: tr.querySelector("select").value, price });
+  }
+  return out;
+}
+
+async function load() {
+  status("Loading…");
+  try {
+    const r = await fetch(API, { headers: headers() });
+    if (!r.ok) throw new Error("Load failed (" + r.status + ")");
+    const j = await r.json();
+    sha = j.sha;
+    const list = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\n/g, "")), c => c.charCodeAt(0))));
+    $("rows").innerHTML = "";
+    list.forEach(addRow);
+    if (!list.length) addRow();
+    status("");
+  } catch (e) { status(e.message, "err"); }
+}
+
+async function save() {
+  if (!store.get("gh_token")) return status("Add your GitHub token below first.", "err");
+  let list;
+  try { list = readRows(); } catch (e) { return status(e.message, "err"); }
+  status("Saving…");
+  const text = JSON.stringify(list, null, 2) + "\n";
+  const bytes = new TextEncoder().encode(text);
+  const content = btoa(String.fromCharCode(...bytes));
+  const r = await fetch(API, {
+    method: "PUT", headers: headers(),
+    body: JSON.stringify({ message: "Update stock alerts", content, sha }),
+  });
+  if (r.status === 409 || r.status === 422) return status("The file changed elsewhere — reload the page and try again.", "err");
+  if (!r.ok) return status("Save failed (" + r.status + "). Check your token has Contents: write.", "err");
+  sha = (await r.json()).content.sha;
+  status("Saved. Active on the next check (within ~5 min).", "ok");
+}
+
+$("add").onclick = () => addRow();
+$("save").onclick = save;
+$("saveToken").onclick = () => { store.set("gh_token", $("token").value.trim()); $("token").value = ""; status("Token remembered in this browser.", "ok"); };
+if (store.get("gh_token")) $("token").placeholder = "Token saved — paste a new one to replace";
+load();
+</script>
+</body>
+</html>

@@ -16,3 +16,8 @@ threshold is crossed.
 Each alert fires once, then re-arms when the price returns to the other side.
 Prices come from Yahoo Finance's unofficial endpoint (may be ~15 min delayed; no API key).
 Note: GitHub cron can lag a few minutes, and anyone who knows your topic can read/post to it.
+
+## Editing thresholds from the web
+Once merged and GitHub Pages is on, open `https://aumy.github.io/stock-alerts/`.
+Paste a fine-grained GitHub token (repo `aumy/aumy.github.io`, Contents: read & write) once;
+the page then commits changes to `alerts.json` for you.
